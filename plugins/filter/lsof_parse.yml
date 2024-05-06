@@ -1,0 +1,71 @@
+DOCUMENTATION:
+  name: lsof_parse
+  version_added: "historical"
+  short_description: Parse raw output from the lsof command
+  description:
+    - The lsof command has an option "-F" to produce output for downstream consumers. This plugin will convert the raw output to a consumable JSON object.
+  positional: lsof_raw
+  options:
+    top_raw:
+      description: stdout_lines from an lsof command using the "-F" flag
+      type: list
+      required: true
+
+EXAMPLES: |
+
+  tasks:
+    - name: Run lsof
+      register: r_lsof_raw
+      ansible.builtin.command: lsof -F
+
+    - name: Parse lsof output
+      ansible.builtin.set_fact:
+        lsof_data: "{{ r_lsof_raw.stdout_lines | lsof_parse }}"
+
+  # r_top_mem_usage.stdout_lines
+  p380
+  g380
+  cloginwindow
+  ...
+  fcwd
+  s640
+  ...
+  ftxt
+  s2706208
+  ...
+  p381
+  ...
+
+  # lsof_output 
+  # see full --> https://reports.autodotes.com/zjleblanc.utils/ansible_lsof_parsed.json
+  {
+    "1": {
+      "pid": "1",
+      "proc_group_id": "1",
+      "proc_login_name": "root",
+      "proc_parent_pid": "0",
+      "proc_user_id": "0",
+      "selinux_context": "system_u:system_r:init_t:s0"
+      "command_name": "systemd",
+      "files": [
+        {
+          "access_mode": " ",
+          "file_descriptor": "cwd",
+          "file_device_num": "0xca04",
+          "file_inode_num": "128",
+          "file_link_count": "19",
+          "file_lock_status": " ",
+          "file_name_comment_addr": "/",
+          "file_size": "4096",
+          "file_type": "DIR"
+        },
+        ...
+      ]
+    },
+    ...
+  }
+
+RETURN:
+  _value:
+    description: The parsed output of an lsof command with "-F"
+    type: dict
