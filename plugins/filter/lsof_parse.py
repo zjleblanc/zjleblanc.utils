@@ -5,7 +5,7 @@ class FilterModule(object):
 
     def do_parse_lsof(self, lsof_raw: list) -> list:
         return self.__parse_lsof_records(lsof_raw)    
-    
+
     @staticmethod
     def __parse_lsof_records(lines: list) -> dict:
         parsed = {}
@@ -53,11 +53,11 @@ class FilterModule(object):
                 continue
             if line[0] == 'i':
                 if file_set_idx >= 0:
-                    parsed[pid]["files"][file_set_idx]['file_inode_num'] = line[1:]
+                    parsed[pid]["files"][file_set_idx]['file_inode_num'] = int(line[1:])
                 continue
             if line[0] == 'k':
                 if file_set_idx >= 0:
-                    parsed[pid]["files"][file_set_idx]['file_link_count'] = line[1:]
+                    parsed[pid]["files"][file_set_idx]['file_link_count'] = int(line[1:])
                 continue
             if line[0] == 'l':
                 if file_set_idx >= 0:
@@ -109,7 +109,7 @@ class FilterModule(object):
                 continue
             if line[0] == 's':
                 if file_set_idx >= 0:
-                    parsed[pid]["files"][file_set_idx]['file_size'] = line[1:]
+                    parsed[pid]["files"][file_set_idx]['file_size'] = int(line[1:])
                 continue
             if line[0] == 'S':
                 if file_set_idx >= 0:
