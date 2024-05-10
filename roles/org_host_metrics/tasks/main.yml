@@ -1,0 +1,20 @@
+---
+- name: Get organizations
+  when: org_host_metrics_org_names is not defined
+  ansible.builtin.set_fact:
+    org_host_metrics_org_names: |
+      {{
+        lookup('ansible.controller.controller_api', 'organizations')
+        | map(attribute='name')
+      }}
+
+- name: Get organization host metrics
+  loop: "{{ org_host_metrics_org_names }}"
+  loop_control:
+    loop_var: __org_name
+  ansible.builtin.include_tasks: organization.yml
+
+- name: Publish report as artifact
+  ansible.builtin.set_stats:
+    data:
+      org_host_metrics_report: "{{ org_host_metrics_report }}"

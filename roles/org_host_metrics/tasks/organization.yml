@@ -1,0 +1,55 @@
+---
+- name: Get organization by name
+  vars:
+    __org_query:
+      name: "{{ __org_name }}"
+  ansible.builtin.set_fact:
+    __org: "{{ lookup('ansible.controller.controller_api', 'organizations', query_params=__org_query, expect_one=true) }}"
+
+- name: Get inventories in organization
+  vars:
+    __inv_query:
+      organization: "{{ __org['id'] }}"
+  ansible.builtin.set_fact:
+    __inventories: |
+      {{
+        lookup('ansible.controller.controller_api', 'inventories', query_params=__inv_query, return_all=true)
+        | listify
+      }}
+
+- name: Instantiate hosts list
+  ansible.builtin.set_fact:
+    __all_hosts: []
+
+- name: Get hosts
+  loop: "{{ __inventories }}"
+  loop_control:
+    loop_var: __inv
+    label: "{{ __inv['name'] }}"
+  vars:
+    __host_query:
+      inventory: "{{ __inv['id'] }}"
+  ansible.builtin.set_fact:
+    __all_hosts: |
+      {{
+        __all_hosts
+        | union(
+          lookup('ansible.controller.controller_api', 'hosts', query_params=__host_query, return_all=true)
+          | listify
+        )
+      }}
+
+- name: Analyze host data
+  when: __inventories | length
+  ansible.builtin.set_fact:
+    __org_host_analysis: "{{ __all_hosts | analyze(__org) }}"
+
+- name: Add to report
+  when: __inventories | length
+  ansible.builtin.set_fact:
+    org_host_metrics_report: "{{ org_host_metrics_report | combine({__org_name: __org_host_analysis}) }}"
+
+- name: Add to report
+  when: not (__inventories | length)
+  ansible.builtin.set_fact:
+    org_host_metrics_report: "{{ org_host_metrics_report | combine({__org_name: {}}) }}"
