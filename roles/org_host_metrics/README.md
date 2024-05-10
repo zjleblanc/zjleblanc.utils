@@ -20,15 +20,23 @@ Example Playbook
 ----------------
 
 ```yaml
-  - hosts: servers
-    tasks:
-      - name: Execute org_host_metrics role
-        ansible.builtin.include_role:
-          name: org_host_metrics
-        vars:
-          # omit to process all organizations
-          org_host_metrics_org_names:
-            - Default
+- name: Retrieve host metrics by organization
+  hosts: localhost
+
+  roles:
+    - role: zjleblanc.utils.org_host_metrics
+      vars:
+        # omit to process all organizations
+        org_host_metrics_org_names:
+          - Autodotes
+          - Default
+
+  tasks:
+    - name: Write report to file
+      ansible.builtin.copy:
+        content: "{{ org_host_metrics_report | to_nice_json(indent=2) }}"
+        dest: "{{ playbook_dir }}/org_host_metrics_report.json"
+        mode: "0644"
 ```
 
 Expected Output
