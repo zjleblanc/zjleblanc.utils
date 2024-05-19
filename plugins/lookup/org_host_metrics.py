@@ -22,7 +22,7 @@ options:
     type: list
 extends_documentation_fragment: zjleblanc.utils.auth_plugin
 notes:
-  - Copied Controller API module_utils from the L(awx.awx,https://github.com/ansible/awx/blob/4754819a0916cbd9352550fb0f8fbc65273854b0/awx_collection/plugins/module_utils/controller_api.py) instead of linking to avoid dependency on the collection. This could be modified in the future to reuse existing code.
+  - Copied Controller API module_utils from L(awx.awx,https://github.com/ansible/awx/blob/4754819a0916cbd9352550fb0f8fbc65273854b0/awx_collection/plugins/module_utils/controller_api.py) instead of linking to avoid dependency on the collection. This could be modified in the future to reuse existing code.
 """
 
 EXAMPLES = """
