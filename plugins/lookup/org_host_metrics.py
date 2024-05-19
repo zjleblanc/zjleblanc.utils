@@ -59,16 +59,16 @@ RETURN = """
         type: dict
         contains:
           hosts_imported:
-            description: The total hosts imported in this Inventory
+            description: The total hosts imported in this Organization
             type: int
           hosts_automated:
-            description: The total hosts automated in this Inventory, based on job execution records
+            description: The total hosts automated in this Organization, based on job execution records
             type: int
           hosts_disabled:
-            description: The total hosts disabled in this Inventory
+            description: The total hosts disabled in this Organization
             type: int
           hosts_with_failures:
-            description: The total hosts with failures in this Inventory, based on job execution records
+            description: The total hosts with failures in this Organization, based on job execution records
             type: int
       inventories:
         description: The Inventory level host metrics keyed off of the Inventory id
