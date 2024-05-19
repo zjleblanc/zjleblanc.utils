@@ -45,14 +45,15 @@ RETURN = """
   _list:
     description:
       - A list of Organization specific host metrics, sub-divided by Inventory
-    type: list
     contains:
       id:
         description: The Organization id
         type: int
+        sample: 1
       name:
         description: The Organization name
         type: str
+        sample: Default
       organization:
         description: The Organization level host metrics
         type: dict
