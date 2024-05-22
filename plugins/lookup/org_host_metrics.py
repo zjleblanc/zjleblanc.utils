@@ -90,6 +90,7 @@ from ansible.errors import AnsibleError
 from ansible.module_utils._text import to_native
 from ansible.utils.display import Display
 from ..module_utils.controller_api import ControllerAPIModule
+from ..module_utils.host_metrics import HostMetrics
 
 
 class LookupModule(LookupBase):
@@ -169,7 +170,7 @@ class LookupModule(LookupBase):
       "inventories": {}
     }
 
-    hostnames = set()
+    hostnames = dict()
     for host in hosts:
       inventory_id = int(host["summary_fields"]["inventory"]["id"])
       inventory_name = host["summary_fields"]["inventory"]["name"]
@@ -180,7 +181,11 @@ class LookupModule(LookupBase):
       host_name = host["name"]
       if host_name not in hostnames:
         report["organization"] = self.__add_host_metrics(report["organization"], host)
-        hostnames.add(host_name)
+        hostnames[host_name] = self.__get_host_flags(host)
+      else:
+        current_flags = hostnames[host_name]
+        incoming_flags = self.__get_host_flags(host)
+        report["organization"] = self.__update_host_metrics(report["organization"], current_flags, incoming_flags)
     
     report["inventories"] = self.__dict2items(report["inventories"])
     return report
@@ -195,19 +200,34 @@ class LookupModule(LookupBase):
     }
   
   @staticmethod
+  def __get_host_flags(host) -> HostMetrics:
+    automated = host["last_job"] != None
+    failures = host["has_active_failures"]
+    disabled = not host["enabled"]
+    return HostMetrics(automated, failures, disabled)
+
+  @staticmethod
   def __add_host_metrics(metrics: dict, host: dict) -> dict:
-      automated = host["last_job"] != None
-      failures = host["has_active_failures"]
-      disabled = not host["enabled"]
+      host_metrics = LookupModule.__get_host_flags(host)
 
       metrics["hosts_imported"] += 1
-      if automated:
+      if host_metrics.automated:
         metrics["hosts_automated"] += 1
-      if failures:
+      if host_metrics.failures:
         metrics["hosts_with_failures"] += 1
-      if disabled:
+      if host_metrics.disabled:
         metrics["hosts_disabled"] += 1
 
+      return metrics
+  
+  @staticmethod
+  def __update_host_metrics(metrics: dict, current: HostMetrics, incoming: HostMetrics) -> dict:
+      if incoming.automated and not current.automated:
+        metrics["hosts_automated"] += 1
+      if incoming.failures and not current.failures:
+        metrics["hosts_with_failures"] += 1
+      if incoming.disabled and not current.disabled:
+        metrics["hosts_disabled"] += 1
       return metrics
   
   @staticmethod
