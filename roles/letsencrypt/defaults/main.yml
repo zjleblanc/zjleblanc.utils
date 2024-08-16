@@ -17,4 +17,5 @@ letsencrypt_http01_webroot: /var/www/html
 letsencrypt_dns01_provider: cloudflare # Only supported provider
 
 # nginx
+letsencrypt_nginx_enabled: false
 letsencrypt_nginx_site_conf: "/etc/nginx/sites-available/{{ letsencrypt_domain_name }}.conf"

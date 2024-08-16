@@ -61,5 +61,5 @@
     file: "dns_01_cleanup.yml" 
 
 - name: Configure nginx
-  when: acme_configure_nginx
+  when: letsencrypt_nginx_enabled
   ansible.builtin.include_tasks: nginx.yml
