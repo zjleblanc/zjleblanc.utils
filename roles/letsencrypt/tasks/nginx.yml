@@ -7,6 +7,7 @@
 - name: "Update nginx ssl cert | {{ letsencrypt_domain_name }}"
   when: r_nginx_site_check.stat.exists
   notify: Restart nginx
+  changed_when: true
   ansible.builtin.lineinfile:
     path: "{{ letsencrypt_nginx_site_conf }}"
     regexp: "^(.*)ssl_certificate {{ letsencrypt_dir }}"
@@ -14,7 +15,6 @@
 
 - name: "Update nginx ssl key | {{ letsencrypt_domain_name }}"
   when: r_nginx_site_check.stat.exists
-  notify: Restart nginx
   ansible.builtin.lineinfile:
     path: "{{ letsencrypt_nginx_site_conf }}"
     regexp: "^(.*)ssl_certificate_key {{ letsencrypt_dir }}"
