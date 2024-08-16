@@ -10,7 +10,11 @@ letsencrypt_keys_dir: "{{ letsencrypt_dir }}/keys"
 letsencrypt_csrs_dir: "{{ letsencrypt_dir }}/csrs"
 letsencrypt_certs_dir: "{{ letsencrypt_dir }}/certs"
 letsencrypt_account_key: "{{ letsencrypt_dir }}/account/account.key"
+letsencrypt_force_renew: false
 
 # letsencrypt_challenge_type: # Either http_01 or dns_01
 letsencrypt_http01_webroot: /var/www/html
 letsencrypt_dns01_provider: cloudflare # Only supported provider
+
+# nginx
+letsencrypt_nginx_site_conf: "/etc/nginx/sites-available/{{ letsencrypt_domain_name }}.conf"

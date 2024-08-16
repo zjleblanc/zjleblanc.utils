@@ -2,13 +2,13 @@
 - name: Check if nginx site exists
   register: r_nginx_site_check
   ansible.builtin.stat:
-    path: "/etc/nginx/sites-available/{{ letsencrypt_domain_name }}.conf"
+    path: "{{ letsencrypt_nginx_site_conf }}"
 
 - name: "Update nginx ssl cert | {{ letsencrypt_domain_name }}"
   when: r_nginx_site_check.stat.exists
   notify: Restart nginx
   ansible.builtin.lineinfile:
-    path: "/etc/nginx/sites-available/{{ letsencrypt_domain_name }}.conf"
+    path: "{{ letsencrypt_nginx_site_conf }}"
     regexp: "^(.*)ssl_certificate {{ letsencrypt_dir }}"
     line: "\tssl_certificate {{ letsencrypt_certs_dir }}/fullchain_{{ letsencrypt_domain_name }}.pem;"
 
@@ -16,6 +16,6 @@
   when: r_nginx_site_check.stat.exists
   notify: Restart nginx
   ansible.builtin.lineinfile:
-    path: "/etc/nginx/sites-available/{{ letsencrypt_domain_name }}.conf"
+    path: "{{ letsencrypt_nginx_site_conf }}"
     regexp: "^(.*)ssl_certificate_key {{ letsencrypt_dir }}"
     line: "\tssl_certificate_key {{ letsencrypt_keys_dir }}/{{ letsencrypt_domain_name }}.key;"

@@ -33,8 +33,10 @@ Role Variables
 | letsencrypt_csrs_dir | default | {{ letsencrypt_dir }}/csrs |  |
 | letsencrypt_certs_dir | default | {{ letsencrypt_dir }}/certs |  |
 | letsencrypt_account_key | default | {{ letsencrypt_dir }}/account/account.key |  |
+| letsencrypt_force_renew | default | false | If true, will bypass condition for expiration <30 days |
 | letsencrypt_http01_webroot | default | /var/www/html |  |
 | letsencrypt_dns01_provider | default | cloudflare | Only supported provider |
+| letsencrypt_nginx_site_conf | default | /etc/nginx/sites-available/{{ letsencrypt_domain_name }}.conf | Assumes the recommended nginx setup where a symlink in **sites-enabled** exists |
 
 Handlers
 --------------
