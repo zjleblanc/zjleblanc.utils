@@ -44,7 +44,7 @@ import json
 import logging
 import ssl
 import typing
-from typing import Any, Awaitable
+from typing import Any
 
 from aiohttp import web
 
@@ -74,7 +74,7 @@ async def webhook(request: web.Request) -> web.Response:
     return web.Response(text=endpoint)
 
 
-def _parse_token(request: web.Request) -> tuple[str, str]:
+def _parse_token(request: web.Request) -> (str, str):
     scheme, token = request.headers["Authorization"].strip().split(" ")
     if scheme != "Bearer":
         raise web.HTTPUnauthorized(text="Only Bearer type is accepted")
@@ -109,18 +109,12 @@ async def _hmac_verify(request: web.Request) -> bool:
         event_digest = base64.b64encode(event_hmac.digest()).decode("utf-8")
     elif hmac_format == "hex":
         event_digest = event_hmac.hexdigest()
-    else:
-        msg = f"Unsupported HMAC header format {hmac_format}"
-        raise ValueError(msg)
 
     return hmac.compare_digest(hmac_header_digest, event_digest)
 
 
 @web.middleware
-async def bearer_auth(
-    request: web.Request,
-    handler: Callable[[web.Request], Awaitable[web.StreamResponse]],
-) -> web.StreamResponse:
+async def bearer_auth(request: web.Request, handler: Callable) -> web.StreamResponse:
     """Verify authorization is Bearer type."""
     try:
         _parse_token(request)
@@ -133,10 +127,7 @@ async def bearer_auth(
 
 
 @web.middleware
-async def hmac_verify(
-    request: web.Request,
-    handler: Callable[[web.Request], Awaitable[web.StreamResponse]],
-) -> web.StreamResponse:
+async def hmac_verify(request: web.Request, handler: Callable) -> web.StreamResponse:
     """Verify event's HMAC signature."""
     hmac_verified = await _hmac_verify(request)
     if not hmac_verified:
@@ -153,9 +144,6 @@ def _get_ssl_context(args: dict[str, Any]) -> ssl.SSLContext | None:
         password = args.get("password", None)
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         try:
-            if not isinstance(certfile, str):  # pragma: no-cover
-                msg = f"certfile is not a string, got a {type(certfile)} instead."
-                raise ValueError(msg)
             context.load_cert_chain(certfile, keyfile, password)
         except Exception:
             logger.exception("Failed to load certificates. Check they are valid")
@@ -172,7 +160,7 @@ def _get_ssl_context(args: dict[str, Any]) -> ssl.SSLContext | None:
     return context
 
 
-async def main(queue: asyncio.Queue[Any], args: dict[str, Any]) -> None:
+async def main(queue: asyncio.Queue, args: dict[str, Any]) -> None:
     """Receive events via webhook."""
     if "port" not in args:
         msg = "Missing required argument: port"
@@ -227,10 +215,10 @@ async def main(queue: asyncio.Queue[Any], args: dict[str, Any]) -> None:
 if __name__ == "__main__":
     """MockQueue if running directly."""
 
-    class MockQueue(asyncio.Queue[Any]):
+    class MockQueue:
         """A fake queue."""
 
-        async def put(self: MockQueue, event: dict[str, Any]) -> None:
+        async def put(self: MockQueue, event: dict) -> None:
             """Print the event."""
             print(event)  # noqa: T201
 
