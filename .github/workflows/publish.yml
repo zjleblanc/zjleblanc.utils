@@ -52,11 +52,11 @@ jobs:
         id: build-collection
         run: ansible-galaxy collection build .
 
-      - name: Publish collection to Private Automation Hub
-        id: publish-pah
-        run: ansible-galaxy collection publish zjleblanc-utils-$NEW_VERSION.tar.gz -s pah
-        env:
-          NEW_VERSION: ${{ env.NEW_VERSION }}
+      # - name: Publish collection to Private Automation Hub
+      #   id: publish-pah
+      #   run: ansible-galaxy collection publish zjleblanc-utils-$NEW_VERSION.tar.gz -s pah
+      #   env:
+      #     NEW_VERSION: ${{ env.NEW_VERSION }}
         
       - name: Publish collection to Galaxy
         id: publish-galaxy

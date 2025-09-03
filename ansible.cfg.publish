@@ -2,7 +2,7 @@
 server_list = pah, galaxy
 
 [galaxy_server.pah]
-url=https://automation-hub.autodotes.com/api/galaxy/
+url=https://ansible.autodotes.com/pulp_ansible/galaxy/published/
 token=my_pah_token
 
 [galaxy_server.galaxy]
