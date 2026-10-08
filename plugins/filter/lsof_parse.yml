@@ -36,7 +36,7 @@ EXAMPLES: |
   p381
   ...
 
-  # lsof_output 
+  # lsof_output
   # see full --> https://reports.autodotes.com/zjleblanc.utils/ansible_lsof_parsed.json
   [
     {

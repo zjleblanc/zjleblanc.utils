@@ -55,7 +55,7 @@ EXAMPLES: |
         "PID": "146",
         "USER": "root",
         ...
-        "COMMAND": "systemd-journal" 
+        "COMMAND": "systemd-journal"
       },
       ...
     ]

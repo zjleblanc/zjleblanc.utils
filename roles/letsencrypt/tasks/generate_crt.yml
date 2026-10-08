@@ -25,14 +25,14 @@
     common_name: "{{ letsencrypt_domain_name }}"
 
 - name: Begin Let's Encrypt challenges
-  register: r_acme_challenge
+  register: letsencrypt_acme_challenge
   community.crypto.acme_certificate:
     acme_directory: "{{ letsencrypt_directory }}"
     acme_version: "{{ letsencrypt_version }}"
     account_key_src: "{{ letsencrypt_account_key }}"
     account_email: "{{ letsencrypt_email }}"
     terms_agreed: 1
-    challenge: "{{ letsencrypt_challenge_type | replace('_','-') }}"
+    challenge: "{{ letsencrypt_challenge_type | replace('_', '-') }}"
     csr: "{{ letsencrypt_csrs_dir }}/{{ letsencrypt_domain_name }}.csr"
     dest: "{{ letsencrypt_certs_dir }}/{{ letsencrypt_domain_name }}.pem"
     fullchain_dest: "{{ letsencrypt_certs_dir }}/fullchain_{{ letsencrypt_domain_name }}.pem"
@@ -40,7 +40,7 @@
 
 - name: "Implement challenge | {{ letsencrypt_challenge_type }}"
   ansible.builtin.include_tasks:
-    file: "{{ letsencrypt_challenge_type }}.yml" 
+    file: "{{ letsencrypt_challenge_type }}.yml"
 
 - name: Complete Let's Encrypt challenges
   community.crypto.acme_certificate:
@@ -48,17 +48,17 @@
     acme_version: "{{ letsencrypt_version }}"
     account_key_src: "{{ letsencrypt_account_key }}"
     account_email: "{{ letsencrypt_email }}"
-    challenge: "{{ letsencrypt_challenge_type | replace('_','-') }}"
+    challenge: "{{ letsencrypt_challenge_type | replace('_', '-') }}"
     csr: "{{ letsencrypt_csrs_dir }}/{{ letsencrypt_domain_name }}.csr"
     dest: "{{ letsencrypt_certs_dir }}/{{ letsencrypt_domain_name }}.pem"
     chain_dest: "{{ letsencrypt_certs_dir }}/chain_{{ letsencrypt_domain_name }}.pem"
     fullchain_dest: "{{ letsencrypt_certs_dir }}/fullchain_{{ letsencrypt_domain_name }}.pem"
-    data: "{{ r_acme_challenge }}"
+    data: "{{ letsencrypt_acme_challenge }}"
 
 - name: Cleanup dns-01 challenge implementation
   when: letsencrypt_challenge_type == 'dns_01'
   ansible.builtin.include_tasks:
-    file: "dns_01_cleanup.yml" 
+    file: "dns_01_cleanup.yml"
 
 - name: Configure nginx
   when: letsencrypt_nginx_enabled
