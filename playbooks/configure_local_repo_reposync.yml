@@ -1,0 +1,150 @@
+---
+# zjleblanc.utils.configure_local_repo_reposync
+#
+# Automates the "Configure a local repository using reposync" procedure from
+# the Ansible Automation Platform disconnected installation guide:
+# https://docs.redhat.com/en/documentation/red_hat_ansible_automation_platform/2.7/install-assembly_aap_containerized_disconnected_installation#configure-local-repo-reposync
+#
+# Inventory groups:
+#   reposync_connected    - RHEL host(s) with an active internet connection
+#                            used to sync and package the BaseOS/AppStream repos.
+#   reposync_disconnected - Air-gapped RHEL host(s) that will consume the
+#                            resulting local repository.
+#
+# Required variables:
+#   rhel_version          - RHEL major version to sync, e.g. 9
+#
+# Optional variables (defaults shown):
+#   reposync_repo_dirname  - rhel-repos
+#   reposync_download_path - "{{ ansible_user_dir }}/{{ reposync_repo_dirname }}" (connected host)
+#   reposync_dest_path     - "/opt/{{ reposync_repo_dirname }}" (disconnected host)
+#   reposync_repo_file     - /etc/yum.repos.d/rhel-local.repo
+#
+# Example:
+#   ansible-playbook zjleblanc.utils.configure_local_repo_reposync -e rhel_version=9
+
+- name: Synchronize BaseOS and AppStream repositories (connected host)
+  hosts: reposync_connected
+  become: true
+  vars:
+    reposync_repo_dirname: rhel-repos
+    reposync_archive_name: "{{ reposync_repo_dirname }}.tar.gz"
+    reposync_download_path: "{{ ansible_user_dir }}/{{ reposync_repo_dirname }}"
+    reposync_remote_archive_path: "{{ ansible_user_dir }}/{{ reposync_archive_name }}"
+    reposync_fetch_dir: "{{ playbook_dir }}/fetched_archives"
+    reposync_local_archive_path: "{{ reposync_fetch_dir }}/{{ reposync_archive_name }}"
+    reposync_baseos_repo_id: "rhel-{{ rhel_version }}-baseos-rhui-rpms"
+    reposync_appstream_repo_id: "rhel-{{ rhel_version }}-appstream-rhui-rpms"
+
+  pre_tasks:
+    - name: Ensure rhel_version is defined
+      ansible.builtin.assert:
+        that:
+          - rhel_version is defined
+        fail_msg: >-
+          rhel_version must be set (e.g. -e rhel_version=9) to determine
+          which BaseOS/AppStream repositories to synchronize.
+
+  tasks:
+    - name: Enable the BaseOS repository via subscription-manager
+      community.general.rhsm_repository:
+        name: "{{ reposync_baseos_repo_id }}"
+        state: enabled
+
+    - name: Enable the AppStream repository via subscription-manager
+      community.general.rhsm_repository:
+        name: "{{ reposync_appstream_repo_id }}"
+        state: enabled
+
+    - name: Install yum-utils (provides reposync)
+      ansible.builtin.dnf:
+        name: yum-utils
+        state: present
+
+    - name: Ensure the reposync download directory exists
+      ansible.builtin.file:
+        path: "{{ reposync_download_path }}"
+        state: directory
+        mode: '0755'
+
+    - name: Synchronize the BaseOS and AppStream repositories with reposync
+      ansible.builtin.command:
+        cmd: "reposync -m --download-metadata --gpgcheck -p {{ reposync_download_path }}"
+        creates: "{{ reposync_download_path }}/{{ reposync_baseos_repo_id }}"
+
+    - name: Compress the synchronized repository directory
+      community.general.archive:
+        path: "{{ reposync_download_path }}"
+        dest: "{{ reposync_remote_archive_path }}"
+        format: gz
+        mode: '0644'
+
+    - name: Ensure the local fetch directory exists on the control node
+      become: false
+      delegate_to: localhost
+      ansible.builtin.file:
+        path: "{{ reposync_fetch_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Fetch the repository archive to the control node
+      ansible.builtin.fetch:
+        src: "{{ reposync_remote_archive_path }}"
+        dest: "{{ reposync_local_archive_path }}"
+        flat: true
+
+- name: Configure local BaseOS/AppStream repository (disconnected host)
+  hosts: reposync_disconnected
+  become: true
+  vars:
+    reposync_repo_dirname: rhel-repos
+    reposync_archive_name: "{{ reposync_repo_dirname }}.tar.gz"
+    reposync_fetch_dir: "{{ playbook_dir }}/fetched_archives"
+    reposync_local_archive_path: "{{ reposync_fetch_dir }}/{{ reposync_archive_name }}"
+    reposync_dest_path: "/opt/{{ reposync_repo_dirname }}"
+    reposync_repo_file: /etc/yum.repos.d/rhel-local.repo
+    reposync_baseos_repo_id: "rhel-{{ rhel_version }}-baseos-rhui-rpms"
+    reposync_appstream_repo_id: "rhel-{{ rhel_version }}-appstream-rhui-rpms"
+    reposync_gpg_key_path: "{{ reposync_dest_path }}/{{ reposync_baseos_repo_id }}/RPM-GPG-KEY-redhat-release"
+
+  pre_tasks:
+    - name: Ensure rhel_version is defined
+      ansible.builtin.assert:
+        that:
+          - rhel_version is defined
+        fail_msg: >-
+          rhel_version must be set (e.g. -e rhel_version=9) to determine the
+          BaseOS/AppStream repository paths.
+
+  tasks:
+    - name: Ensure the destination parent directory exists
+      ansible.builtin.file:
+        path: "{{ reposync_dest_path | dirname }}"
+        state: directory
+        mode: '0755'
+
+    - name: Copy and extract the repository archive
+      ansible.builtin.unarchive:
+        src: "{{ reposync_local_archive_path }}"
+        dest: "{{ reposync_dest_path | dirname }}"
+        remote_src: false
+
+    - name: Create the local Yum repository definition
+      ansible.builtin.template:
+        src: rhel_local.repo.j2
+        dest: "{{ reposync_repo_file }}"
+        mode: '0644'
+
+    - name: Import the Red Hat RPM GPG key
+      ansible.builtin.rpm_key:
+        state: present
+        key: "{{ reposync_gpg_key_path }}"
+
+    - name: Verify the local repository configuration  # noqa command-instead-of-module
+      ansible.builtin.command: yum repolist
+      register: reposync_repolist
+      changed_when: false
+
+    - name: Show the repository list
+      ansible.builtin.debug:
+        var: reposync_repolist.stdout_lines

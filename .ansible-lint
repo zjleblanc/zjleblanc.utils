@@ -1,0 +1,7 @@
+---
+skip_list:
+  - galaxy
+  - galaxy[version]
+  - schema[galaxy]
+
+offline: true

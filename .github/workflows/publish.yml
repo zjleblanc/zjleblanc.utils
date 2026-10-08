@@ -21,10 +21,10 @@ jobs:
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
-        
+
       - name: Install python requirements
         run: pip install ansible
-          
+
       - name: substitute token for automation hub
         id: inject-tokens
         run: |
@@ -57,7 +57,7 @@ jobs:
       #   run: ansible-galaxy collection publish zjleblanc-utils-$NEW_VERSION.tar.gz -s pah
       #   env:
       #     NEW_VERSION: ${{ env.NEW_VERSION }}
-        
+
       - name: Publish collection to Galaxy
         id: publish-galaxy
         run: ansible-galaxy collection publish zjleblanc-utils-$NEW_VERSION.tar.gz -s galaxy
