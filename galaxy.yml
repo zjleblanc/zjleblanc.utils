@@ -1,6 +1,7 @@
+# yaml-language-server: $schema=none
 namespace: zjleblanc
 name: utils
-version: semantic_version
+version: 0.0.0-semantic-version
 readme: README.md
 authors:
   - Zach LeBlanc <@zjleblanc>

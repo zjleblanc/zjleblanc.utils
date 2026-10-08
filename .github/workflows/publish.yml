@@ -44,7 +44,7 @@ jobs:
         id: set-version
         run: |
           echo $NEW_VERSION
-          sed -i "s/semantic_version/$NEW_VERSION/1" galaxy.yml
+          sed -i "s/0.0.0-semantic-version/$NEW_VERSION/1" galaxy.yml
         env:
           NEW_VERSION: ${{ env.NEW_VERSION }}
 
