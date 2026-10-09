@@ -10,7 +10,7 @@ Ansible collection for utility operations
 
 | Name | Description |
 | -------- | ------- |
-| [configure_local_repo_reposync](playbooks/configure_local_repo_reposync.yml) | Configure a disconnected AAP local yum repository via `reposync` |
+| [download_aap_installer_rpm_deps](playbooks/download_aap_installer_rpm_deps.yml) | Download/install the base OS RPM dependencies required by the AAP containerized installer on a disconnected host |
 
 See [playbooks/README.md](playbooks/README.md) for variables and usage.
 

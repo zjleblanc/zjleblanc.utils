@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
-- `configure_local_repo_reposync` playbook, automating [Configure a local repository using reposync](https://docs.redhat.com/en/documentation/red_hat_ansible_automation_platform/2.7/install-assembly_aap_containerized_disconnected_installation#configure-local-repo-reposync) from the Ansible Automation Platform disconnected installation guide.
+- `download_aap_installer_rpm_deps` playbook, downloading only the base OS RPM dependencies (e.g. `podman`, `ansible-core`, `crun`) required by the [Ansible Automation Platform containerized installer](https://docs.redhat.com/en/documentation/red_hat_ansible_automation_platform/2.7/install-assembly_aap_containerized_disconnected_installation) via `dnf download --resolve`, and installing them on a disconnected host via `dnf localinstall`.
 - `community.general` collection dependency, required by the new playbook.
 
 ## [1.3.9] and earlier

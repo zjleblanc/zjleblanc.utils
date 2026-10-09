@@ -1,0 +1,154 @@
+---
+# zjleblanc.utils.download_aap_installer_rpm_deps
+#
+# Downloads only the host-level RPM dependencies required by the Ansible
+# Automation Platform containerized installer (e.g. podman, ansible-core,
+# crun) and transfers them to a disconnected host for local installation.
+#
+# The AAP bundled setup tarball already ships every container image and
+# collection needed for the install, so the disconnected host only needs a
+# small set of base OS packages -- there is no need to mirror the entire
+# BaseOS/AppStream repositories with reposync.
+#
+# Inventory groups:
+#   rpm_download_connected    - RHEL host(s) with an active internet
+#                                connection used to download the RPMs and
+#                                their dependency tree via `dnf download`.
+#   rpm_download_disconnected - Air-gapped RHEL host(s) that will install
+#                                the downloaded RPMs via `dnf localinstall`.
+#
+# Optional variables (defaults shown):
+#   aap_rpm_dirname        - aap-rpm-deps
+#   aap_rpm_download_path  - "{{ ansible_user_dir }}/{{ aap_rpm_dirname }}"
+#                            (connected host)
+#   aap_rpm_dest_path      - "/opt/{{ aap_rpm_dirname }}" (disconnected host)
+#   aap_installer_packages - see defaults below; the RPMs (and their
+#                            dependency tree) required by the AAP
+#                            containerized installer.
+#
+# Example:
+#   ansible-playbook zjleblanc.utils.download_aap_installer_rpm_deps
+
+- name: Download AAP installer RPM dependencies (connected host)
+  hosts: rpm_download_connected
+  become: true
+  vars:
+    aap_rpm_dirname: aap-rpm-deps
+    aap_rpm_archive_name: "{{ aap_rpm_dirname }}.tar.gz"
+    aap_rpm_download_path: "{{ ansible_user_dir }}/{{ aap_rpm_dirname }}"
+    aap_rpm_remote_archive_path: >-
+      {{ ansible_user_dir }}/{{ aap_rpm_archive_name }}
+    aap_rpm_fetch_dir: "{{ playbook_dir }}/fetched_archives"
+    aap_rpm_local_archive_path: >-
+      {{ aap_rpm_fetch_dir }}/{{ aap_rpm_archive_name }}
+    # Base OS packages required by the AAP containerized installer's
+    # ansible.containerized_installer common role (podman_packages, plus
+    # polkit/gzip/rsync installed during common setup), container-selinux,
+    # python3-firewall (only needed when firewalld is enabled), and
+    # ansible-core to run the installer itself.
+    aap_installer_packages:
+      - ansible-core
+      - podman
+      - crun
+      - slirp4netns
+      - fuse-overlayfs
+      - polkit
+      - gzip
+      - rsync
+      - container-selinux
+      - python3-firewall
+
+  tasks:
+    - name: Install dnf-plugins-core (provides dnf download)
+      ansible.builtin.dnf:
+        name: dnf-plugins-core
+        state: present
+
+    - name: Ensure the RPM download directory exists
+      ansible.builtin.file:
+        path: "{{ aap_rpm_download_path }}"
+        state: directory
+        mode: '0755'
+
+    - name: Download the installer packages  # noqa command-instead-of-module
+      ansible.builtin.command:
+        cmd: >-
+          dnf download --resolve --destdir={{ aap_rpm_download_path }}
+          {{ aap_installer_packages | join(' ') }}
+        creates: "{{ aap_rpm_download_path }}/*.rpm"
+      register: aap_rpm_download
+      changed_when: "'already exists' not in aap_rpm_download.stdout"
+
+    - name: Compress the downloaded RPM directory
+      community.general.archive:
+        path: "{{ aap_rpm_download_path }}"
+        dest: "{{ aap_rpm_remote_archive_path }}"
+        format: gz
+        mode: '0644'
+
+    - name: Ensure the local fetch directory exists on the control node
+      become: false
+      delegate_to: localhost
+      ansible.builtin.file:
+        path: "{{ aap_rpm_fetch_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Fetch the RPM archive to the control node
+      ansible.builtin.fetch:
+        src: "{{ aap_rpm_remote_archive_path }}"
+        dest: "{{ aap_rpm_local_archive_path }}"
+        flat: true
+
+- name: Install AAP installer RPM dependencies (disconnected host)
+  hosts: rpm_download_disconnected
+  become: true
+  vars:
+    aap_rpm_dirname: aap-rpm-deps
+    aap_rpm_archive_name: "{{ aap_rpm_dirname }}.tar.gz"
+    aap_rpm_fetch_dir: "{{ playbook_dir }}/fetched_archives"
+    aap_rpm_local_archive_path: >-
+      {{ aap_rpm_fetch_dir }}/{{ aap_rpm_archive_name }}
+    aap_rpm_dest_path: "/opt/{{ aap_rpm_dirname }}"
+    aap_installer_packages:
+      - ansible-core
+      - podman
+      - crun
+      - slirp4netns
+      - fuse-overlayfs
+      - polkit
+      - gzip
+      - rsync
+      - container-selinux
+      - python3-firewall
+
+  tasks:
+    - name: Ensure the destination parent directory exists
+      ansible.builtin.file:
+        path: "{{ aap_rpm_dest_path | dirname }}"
+        state: directory
+        mode: '0755'
+
+    - name: Copy and extract the RPM archive
+      ansible.builtin.unarchive:
+        src: "{{ aap_rpm_local_archive_path }}"
+        dest: "{{ aap_rpm_dest_path | dirname }}"
+        remote_src: false
+
+    - name: Install the AAP installer RPMs  # noqa command-instead-of-module
+      ansible.builtin.command:
+        cmd: >-
+          dnf localinstall -y --disablerepo=*
+          {{ aap_rpm_dest_path }}/*.rpm
+      register: aap_rpm_localinstall
+      changed_when: "'Nothing to do' not in aap_rpm_localinstall.stdout"
+
+    - name: Verify the packages are installed  # noqa command-instead-of-module
+      ansible.builtin.command: "rpm -q {{ aap_installer_packages | join(' ') }}"
+      register: aap_rpm_verify
+      changed_when: false
+      failed_when: aap_rpm_verify.rc != 0
+
+    - name: Show the installed package versions
+      ansible.builtin.debug:
+        var: aap_rpm_verify.stdout_lines
