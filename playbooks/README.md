@@ -14,8 +14,8 @@ Requires `community.general` (for `archive`).
 
 | Group | Description |
 | -------- | ------- |
-| `rpm_download_connected` | RHEL host with an active internet connection used to run `dnf download` |
-| `rpm_download_disconnected` | Air-gapped RHEL host(s) that will install the downloaded RPMs via `dnf localinstall` |
+| `rhel_connected` | RHEL host with an active internet connection used to run `dnf download` |
+| `rhel_disconnected` | Air-gapped RHEL host(s) that will install the downloaded RPMs via `dnf localinstall` |
 
 **Variables**
 
@@ -51,10 +51,10 @@ aap_installer_packages:
 ```
 
 ```ini
-[rpm_download_connected]
+[rhel_connected]
 connected-rhel.example.com
 
-[rpm_download_disconnected]
+[rhel_disconnected]
 disconnected-rhel.example.com
 ```
 

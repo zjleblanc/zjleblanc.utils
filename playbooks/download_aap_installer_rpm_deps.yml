@@ -11,10 +11,10 @@
 # BaseOS/AppStream repositories with reposync.
 #
 # Inventory groups:
-#   rpm_download_connected    - RHEL host(s) with an active internet
+#   rhel_connected    - RHEL host(s) with an active internet
 #                                connection used to download the RPMs and
 #                                their dependency tree via `dnf download`.
-#   rpm_download_disconnected - Air-gapped RHEL host(s) that will install
+#   rhel_disconnected - Air-gapped RHEL host(s) that will install
 #                                the downloaded RPMs via `dnf localinstall`.
 #
 # Optional variables (defaults shown):
@@ -30,9 +30,10 @@
 #   ansible-playbook zjleblanc.utils.download_aap_installer_rpm_deps
 
 - name: Download AAP installer RPM dependencies (connected host)
-  hosts: rpm_download_connected
+  hosts: rhel_connected
   become: true
   vars:
+    aap_version: "2.7"
     aap_rpm_dirname: aap-rpm-deps
     aap_rpm_archive_name: "{{ aap_rpm_dirname }}.tar.gz"
     aap_rpm_download_path: "{{ ansible_user_dir }}/{{ aap_rpm_dirname }}"
@@ -49,6 +50,14 @@
     aap_installer_packages:
       - ansible-core
       - podman
+      - netavark        # podman: container network stack
+      - passt           # podman: user-mode networking backend
+      - passt-selinux   # passt conditional dep (if selinux-policy-targeted);
+                         # listed explicitly as a defense-in-depth safety net
+                         # alongside the "verify every package was
+                         # downloaded" task below
+      - conmon          # podman: container monitor
+      - containers-common  # podman: shared configuration/data
       - crun
       - slirp4netns
       - fuse-overlayfs
@@ -56,6 +65,8 @@
       - gzip
       - rsync
       - container-selinux
+      - selinux-policy           # base; must match selinux-policy-targeted version
+      - selinux-policy-targeted  # container-selinux requires >= el9_8 version
       - python3-firewall
 
   tasks:
@@ -64,26 +75,125 @@
         name: dnf-plugins-core
         state: present
 
+    - name: Install createrepo_c (generates local repo metadata for the archive)
+      ansible.builtin.dnf:
+        name: createrepo_c
+        state: present
+
     - name: Ensure the RPM download directory exists
       ansible.builtin.file:
         path: "{{ aap_rpm_download_path }}"
         state: directory
         mode: '0755'
 
-    - name: Download the installer packages  # noqa command-instead-of-module
+    - name: Enable the AAP RHSM repository
+      community.general.rhsm_repository:
+        name: >-
+          ansible-automation-platform-{{ aap_version }}-for-rhel-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}-rpms
+        state: enabled
+
+    - name: Remove any stale DNF installroot from a previous run
+      # Re-running the playbook against a leftover /tmp/dnf-download-root
+      # reuses that installroot's rpmdb, module state, and dnf cache from
+      # whatever happened on the last run (e.g. a prior container-tools
+      # module enable, or a previous partial/failed download). That stale
+      # state can silently change how the install/download transaction
+      # resolves packages on subsequent runs. Always start from a clean
+      # installroot.
+      ansible.builtin.file:
+        path: /tmp/dnf-download-root
+        state: absent
+
+    - name: Ensure the DNF installroot directory exists
+      ansible.builtin.file:
+        path: /tmp/dnf-download-root
+        state: directory
+        mode: '0755'
+
+    - name: Enable the container-tools module in the DNF installroot  # noqa command-instead-of-module
+      # podman's dependencies (netavark, passt, conmon, containers-common)
+      # are gated behind the container-tools module stream.  Without enabling
+      # it in the empty installroot first, dnf --resolve cannot find these
+      # packages and omits them from the downloaded set.
       ansible.builtin.command:
         cmd: >-
-          dnf download --resolve --destdir={{ aap_rpm_download_path }}
+          dnf module enable container-tools -y
+          --installroot=/tmp/dnf-download-root
+          --releasever={{ ansible_distribution_major_version }}
+          --setopt=reposdir=/etc/yum.repos.d
+      changed_when: true
+      failed_when: false
+
+    - name: Download the installer packages and their full dependency trees  # noqa command-instead-of-module
+      # `dnf install --downloadonly` is used here instead of
+      # `dnf download --resolve`. The `download` plugin only performs a
+      # lightweight dependency walk and does NOT correctly evaluate RPM
+      # rich/boolean ("if X") conditional dependencies -- e.g. passt's
+      # `Requires: (passt-selinux = X if selinux-policy-targeted)`. Because
+      # selinux-policy-targeted is absent from a totally empty installroot,
+      # `download --resolve` silently drops passt-selinux from the
+      # downloaded set, even though it IS required on the disconnected host.
+      #
+      # `dnf install --downloadonly` instead runs dnf's real transaction
+      # solver: since selinux-policy-targeted is itself part of this same
+      # install request, the solver correctly recognizes it will be present
+      # once the transaction completes and pulls in conditional dependents
+      # like passt-selinux automatically -- no manual pre-seeding needed.
+      #
+      # --installroot uses an empty chroot so dnf resolves ALL transitive
+      # dependencies as if installing on a fresh RHEL system.  Without this,
+      # resolution would skip packages already installed on the connected
+      # host (e.g. python3.12, libslirp, fuse3, conmon, netavark) that are
+      # absent on the target disconnected host.
+      # --setopt=reposdir= points dnf at the host's repo config so RHSM repos
+      # (including the AAP repo enabled above) are used for resolution.
+      # --best ensures the highest available version of every package (e.g.
+      # selinux-policy/selinux-policy-targeted/container-selinux) is fetched.
+      ansible.builtin.command:
+        cmd: >-
+          dnf install --downloadonly -y --best
+          --installroot=/tmp/dnf-download-root
+          --releasever={{ ansible_distribution_major_version }}
+          --setopt=reposdir=/etc/yum.repos.d
+          --downloaddir={{ aap_rpm_download_path }}
           {{ aap_installer_packages | join(' ') }}
-        creates: "{{ aap_rpm_download_path }}/*.rpm"
       register: aap_rpm_download
-      changed_when: "'already exists' not in aap_rpm_download.stdout"
+      changed_when: "'Nothing to do' not in aap_rpm_download.stdout"
+      # dnf has been observed to not always return a non-zero exit code when
+      # one of several named packages can't be matched -- it just prints a
+      # warning and continues with the rest. Fail loudly here instead of
+      # silently shipping an incomplete archive to the disconnected host.
+      failed_when: >-
+        aap_rpm_download.rc != 0 or
+        'No match for argument' in aap_rpm_download.stdout or
+        'Unable to find a match' in aap_rpm_download.stdout
+
+    - name: Verify every requested package was actually downloaded
+      # Explicit name-based download of every entry in aap_installer_packages
+      # should always succeed; this is a second line of defense against the
+      # dnf download quirk above skipping a package (e.g. passt-selinux)
+      # without failing the task.
+      ansible.builtin.find:
+        paths: "{{ aap_rpm_download_path }}"
+        patterns: "{{ item }}-[0-9^]*.rpm"
+        use_regex: false
+      register: aap_rpm_pkg_check
+      loop: "{{ aap_installer_packages }}"
+      failed_when: aap_rpm_pkg_check.matched == 0
+
+    - name: Generate local repo metadata  # noqa command-instead-of-module
+      # Creates repodata/ inside the download dir so the disconnected host
+      # can use it as a proper DNF repo without needing createrepo_c itself.
+      ansible.builtin.command:
+        cmd: createrepo_c {{ aap_rpm_download_path }}
+      changed_when: true
 
     - name: Compress the downloaded RPM directory
       community.general.archive:
         path: "{{ aap_rpm_download_path }}"
         dest: "{{ aap_rpm_remote_archive_path }}"
         format: gz
+        force_archive: true
         mode: '0644'
 
     - name: Ensure the local fetch directory exists on the control node
@@ -101,7 +211,7 @@
         flat: true
 
 - name: Install AAP installer RPM dependencies (disconnected host)
-  hosts: rpm_download_disconnected
+  hosts: rhel_disconnected
   become: true
   vars:
     aap_rpm_dirname: aap-rpm-deps
@@ -113,6 +223,11 @@
     aap_installer_packages:
       - ansible-core
       - podman
+      - netavark
+      - passt
+      - passt-selinux
+      - conmon
+      - containers-common
       - crun
       - slirp4netns
       - fuse-overlayfs
@@ -120,6 +235,8 @@
       - gzip
       - rsync
       - container-selinux
+      - selinux-policy
+      - selinux-policy-targeted
       - python3-firewall
 
   tasks:
@@ -135,13 +252,42 @@
         dest: "{{ aap_rpm_dest_path | dirname }}"
         remote_src: false
 
+    - name: Create temporary local DNF repository
+      # Points dnf at the extracted RPM directory (which ships with repodata/
+      # generated on the connected host) so dnf install can resolve deps
+      # without touching any packages outside aap_installer_packages.
+      ansible.builtin.copy:
+        dest: /etc/yum.repos.d/aap-local-deps.repo
+        content: |
+          [aap-local-deps]
+          name=AAP Local RPM Dependencies
+          baseurl=file://{{ aap_rpm_dest_path }}
+          enabled=1
+          gpgcheck=0
+        mode: '0644'
+
     - name: Install the AAP installer RPMs  # noqa command-instead-of-module
+      # --best forces dnf to take the highest version available in the local
+      # repo (e.g. the newer selinux-policy/selinux-policy-targeted shipped
+      # in the archive) instead of silently leaving an older, already
+      # installed version in place and failing to satisfy newer
+      # dependencies (e.g. container-selinux's selinux-policy-any >= X).
+      # --allowerasing permits dnf to resolve the resulting upgrade
+      # transaction even if it must remove/replace conflicting packages.
       ansible.builtin.command:
         cmd: >-
-          dnf localinstall -y --disablerepo=*
-          {{ aap_rpm_dest_path }}/*.rpm
-      register: aap_rpm_localinstall
-      changed_when: "'Nothing to do' not in aap_rpm_localinstall.stdout"
+          dnf install -y
+          --disablerepo=*
+          --enablerepo=aap-local-deps
+          --best --allowerasing
+          {{ aap_installer_packages | join(' ') }}
+      register: aap_rpm_install
+      changed_when: "'Nothing to do' not in aap_rpm_install.stdout"
+
+    - name: Remove the temporary local DNF repository
+      ansible.builtin.file:
+        path: /etc/yum.repos.d/aap-local-deps.repo
+        state: absent
 
     - name: Verify the packages are installed  # noqa command-instead-of-module
       ansible.builtin.command: "rpm -q {{ aap_installer_packages | join(' ') }}"
